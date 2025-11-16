@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Assuming you're using this for storage; add to pubspec.yaml if not.
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../providers/api_keys_provider.dart';  // Added: For backend sync
 
 class ApiKeysScreen extends StatefulWidget {
-  final String userEmail; // Added: Required userEmail parameter
+  final String userEmail; // Required userEmail parameter
 
   const ApiKeysScreen({
     super.key,
-    required this.userEmail, // FIXED: Added named parameter 'userEmail'
+    required this.userEmail,
   });
 
   @override
@@ -35,44 +37,67 @@ class _ApiKeysScreenState extends State<ApiKeysScreen> {
     _krakenKey = TextEditingController();
     _krakenSecret = TextEditingController();
 
-    // Optional: Load saved values
-    _loadSavedKeys();
+    // Load saved values via provider (backend first, then local)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final provider = Provider.of<ApiKeysProvider>(context, listen: false);
+      provider.loadKeys();  // Triggers notifyListeners to populate controllers
+      _loadLocalFallback();  // Immediate local load for UI
+    });
   }
 
-  // Load saved API keys from SharedPreferences (prefixed by userEmail for multi-user support)
-  Future<void> _loadSavedKeys() async {
+  // Load from local as fallback (while provider loads backend)
+  Future<void> _loadLocalFallback() async {
     final prefs = await SharedPreferences.getInstance();
-    final email = widget.userEmail; // Use passed userEmail
+    final email = widget.userEmail;
     _cexKey.text = prefs.getString('${email}_cex_key') ?? '';
     _cexSecret.text = prefs.getString('${email}_cex_secret') ?? '';
     _krakenKey.text = prefs.getString('${email}_kraken_key') ?? '';
     _krakenSecret.text = prefs.getString('${email}_kraken_secret') ?? '';
-    setState(() {}); // Trigger rebuild if needed
+    if (mounted) setState(() {});  // UI update
   }
 
-  // Save API keys (prefixed by userEmail)
+  // Save via provider (backend + local sync)
   Future<void> _saveKeys() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Check all fields filled (matches backend requirement)
+    if (_cexKey.text.isEmpty || _cexSecret.text.isEmpty || _krakenKey.text.isEmpty || _krakenSecret.text.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please fill all API key fields to enable sync.'), backgroundColor: Colors.orange),
+        );
+      }
+      return;
+    }
+
     setState(() => _isSaving = true);
-    final prefs = await SharedPreferences.getInstance();
-    final email = widget.userEmail; // Use passed userEmail
-    await prefs.setString('${email}_cex_key', _cexKey.text);
-    await prefs.setString('${email}_cex_secret', _cexSecret.text);
-    await prefs.setString('${email}_kraken_key', _krakenKey.text);
-    await prefs.setString('${email}_kraken_secret', _krakenSecret.text);
+    final provider = Provider.of<ApiKeysProvider>(context, listen: false);
+    final success = await provider.saveKeys(
+      _cexKey.text,
+      _cexSecret.text,
+      _krakenKey.text,
+      _krakenSecret.text,
+    );
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('API keys saved successfully!')),
-      );
       setState(() => _isSaving = false);
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('API keys saved and synced! Balances will update.'), backgroundColor: Colors.green),
+        );
+        // Optional: Pop back to Home and refresh balances (if navigated from there)
+        // Navigator.pop(context);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Save failed: ${provider.errorMessage}'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
   @override
   void dispose() {
-    // Dispose controllers (now matching private names)
+    // Dispose controllers
     _cexKey.dispose();
     _cexSecret.dispose();
     _krakenKey.dispose();
@@ -82,88 +107,119 @@ class _ApiKeysScreenState extends State<ApiKeysScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('API Keys for ${widget.userEmail}'), // Optional: Display email in title
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-      ),
-      body: SingleChildScrollView(  // Scrollable to handle keyboard
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(  // Fixed: Ensured proper children list with no extra commas/parentheses
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Enter your exchange API keys below for ${widget.userEmail}.', // Updated: Include email
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 20),
-              // CEX.IO Section (removed Binance reference)
-              ExpansionTile(
-                title: const Text('CEX.IO'),
-                children: [
-                  TextFormField(
-                    controller: _cexKey,
-                    decoration: const InputDecoration(
-                      labelText: 'API Key',
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (value) => value?.isEmpty == true ? 'API Key is required' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _cexSecret,
-                    decoration: const InputDecoration(
-                      labelText: 'API Secret',
-                      border: OutlineInputBorder(),
-                    ),
-                    obscureText: true,
-                    validator: (value) => value?.isEmpty == true ? 'API Secret is required' : null,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              // Kraken Section
-              ExpansionTile(
-                title: const Text('Kraken'),
-                children: [
-                  TextFormField(
-                    controller: _krakenKey,
-                    decoration: const InputDecoration(
-                      labelText: 'API Key',
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (value) => value?.isEmpty == true ? 'API Key is required' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _krakenSecret,
-                    decoration: const InputDecoration(
-                      labelText: 'API Secret',
-                      border: OutlineInputBorder(),
-                    ),
-                    obscureText: true,
-                    validator: (value) => value?.isEmpty == true ? 'API Secret is required' : null,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 30),
-              // Save Button
-              ElevatedButton(
-                onPressed: _isSaving ? null : _saveKeys,
-                child: _isSaving
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Save API Keys'),
-              ),
-            ],
+    return Consumer<ApiKeysProvider>(  // Added: Listen to provider for loading/errors
+      builder: (context, provider, child) {
+        // Sync controllers to provider state (after load)
+        if (provider.cexKey.isNotEmpty) {
+          _cexKey.text = provider.cexKey;
+          _cexSecret.text = provider.cexSecret;
+          _krakenKey.text = provider.krakenKey;
+          _krakenSecret.text = provider.krakenSecret;
+        }
+
+        return Scaffold(
+          appBar: AppBar(
+            title: Text('API Keys for ${widget.userEmail}'),
+            backgroundColor: Theme.of(context).colorScheme.inversePrimary,
           ),
-        ),
-      ),
+          body: provider.isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : provider.errorMessage.isNotEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text('Load Error: ${provider.errorMessage}', style: const TextStyle(color: Colors.red)),
+                          ElevatedButton(
+                            onPressed: () => provider.loadKeys(),
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    )
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              'Enter your exchange API keys below for ${widget.userEmail}.',
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 20),
+                            // CEX.IO Section
+                            ExpansionTile(
+                              title: const Text('CEX.IO'),
+                              children: [
+                                TextFormField(
+                                  controller: _cexKey,
+                                  decoration: const InputDecoration(
+                                    labelText: 'API Key',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  validator: (value) => value?.isEmpty == true ? 'API Key is required' : null,
+                                  onChanged: (value) => provider.cexKey = value,  // Sync to provider
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  controller: _cexSecret,
+                                  decoration: const InputDecoration(
+                                    labelText: API Secret',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  obscureText: true,
+                                  validator: (value) => value?.isEmpty == true ? 'API Secret is required' : null,
+                                  onChanged: (value) => provider.cexSecret = value,  // Sync to provider
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                            // Kraken Section
+                            ExpansionTile(
+                              title: const Text('Kraken'),
+                              children: [
+                                TextFormField(
+                                  controller: _krakenKey,
+                                  decoration: const InputDecoration(
+                                    labelText: 'API Key',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  validator: (value) => value?.isEmpty == true ? 'API Key is required' : null,
+                                  onChanged: (value) => provider.krakenKey = value,  // Sync to provider
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  controller: _krakenSecret,
+                                  decoration: const InputDecoration(
+                                    labelText: 'API Secret',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  obscureText: true,
+                                  validator: (value) => value?.isEmpty == true ? 'API Secret is required' : null,
+                                  onChanged: (value) => provider.krakenSecret = value,  // Sync to provider
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 30),
+                            // Save Button
+                            ElevatedButton(
+                              onPressed: _isSaving ? null : _saveKeys,
+                              child: _isSaving
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : const Text('Save & Sync API Keys'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+        );
+      },
     );
   }
 }
