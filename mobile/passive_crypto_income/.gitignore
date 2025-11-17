@@ -47,3 +47,7 @@ backend_backup/
 mobile_backup/
 *.tar.gz
 backend/
+../../backend/
+../../backend_backup/
+../../mobile_backup/
+../../*.tar.gz
