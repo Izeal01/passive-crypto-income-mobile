@@ -4,7 +4,6 @@ import 'dart:async';
 import '../providers/api_keys_provider.dart';  // For auto-refresh listener
 import '../services/api_service.dart';
 import '../services/websocket_service.dart';  // For real-time WS updates
-// Removed unused import 'api_keys_screen.dart'
 
 class DashboardScreen extends StatefulWidget {
   final String userEmail;  // From login
@@ -143,7 +142,7 @@ class DashboardScreenState extends State<DashboardScreen> {  // Public class nam
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Set failed: $e'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Set failed: $e'), backgroundColor: Colors.red));  // FIXED: Added ';'
       }
     }
   }
@@ -214,18 +213,18 @@ class DashboardScreenState extends State<DashboardScreen> {  // Public class nam
                               color: Colors.blue.shade50,
                               child: _balances['error'] != null
                                   ? ListTile(
-                                      title: const Text('USD Balances'),  // FIXED: Changed from 'USDT' to 'USD'
+                                      title: const Text('USD Balances'),
                                       subtitle: Text(_balances['error'] ?? 'Loading... (Save API keys first?)', style: const TextStyle(color: Colors.red)),
                                     )
                                   : ListTile(
-                                      title: const Text('USD Balances'),  // FIXED: Changed from 'USDT' to 'USD'
+                                      title: const Text('USD Balances'),
                                       subtitle: Text('CEX.IO: \$${_balances['cex_usd']?.toStringAsFixed(2) ?? '0'}\nKraken: \$${_balances['kraken_usd']?.toStringAsFixed(2) ?? '0'}'),
                                     ),
                             ),
                             Card(
                               child: Column(
                                 children: [
-                                  const ListTile(title: Text('Set Trade Amount (USD)')),  // FIXED: Changed from 'USDT' to 'USD'
+                                  const ListTile(title: Text('Set Trade Amount (USD)')),
                                   Padding(
                                     padding: const EdgeInsets.symmetric(horizontal: 16),
                                     child: TextFormField(

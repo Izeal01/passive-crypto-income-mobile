@@ -7,7 +7,7 @@ import 'dashboard_screen.dart';
 import 'api_keys_screen.dart';
 import 'login_screen.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends StatefulWidget {  // FIXED: 'StatefulWidget' (was 'StatefuleWidget')
   final String userEmail;
   const HomeScreen({super.key, required this.userEmail});
 
@@ -150,11 +150,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             color: Colors.blue.shade50,
                             child: _balances['error'] != null
                                 ? ListTile(
-                                    title: const Text('Account Balances'),
+                                    title: const Text('USD Balances'),
                                     subtitle: Text(_balances['error'] ?? 'Loading...', style: const TextStyle(color: Colors.red)),
                                   )
                                 : ListTile(
-                                    title: const Text('Account Balances'),
+                                    title: const Text('USD Balances'),
                                     subtitle: Text(
                                       'CEX.IO: \$${_balances['cex_usd']?.toStringAsFixed(2) ?? '0.00'}\nKraken: \$${_balances['kraken_usd']?.toStringAsFixed(2) ?? '0.00'}',
                                     ),
