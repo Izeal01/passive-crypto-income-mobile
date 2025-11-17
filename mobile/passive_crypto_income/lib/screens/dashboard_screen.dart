@@ -4,7 +4,7 @@ import 'dart:async';
 import '../providers/api_keys_provider.dart';  // For auto-refresh listener
 import '../services/api_service.dart';
 import '../services/websocket_service.dart';  // For real-time WS updates
-// FIXED: Removed unused import 'api_keys_screen.dart'
+// Removed unused import 'api_keys_screen.dart'
 
 class DashboardScreen extends StatefulWidget {
   final String userEmail;  // From login
@@ -214,18 +214,18 @@ class DashboardScreenState extends State<DashboardScreen> {  // Public class nam
                               color: Colors.blue.shade50,
                               child: _balances['error'] != null
                                   ? ListTile(
-                                      title: const Text('USDT Balances'),
+                                      title: const Text('USD Balances'),  // FIXED: Changed from 'USDT' to 'USD'
                                       subtitle: Text(_balances['error'] ?? 'Loading... (Save API keys first?)', style: const TextStyle(color: Colors.red)),
                                     )
                                   : ListTile(
-                                      title: const Text('USDT Balances'),
+                                      title: const Text('USD Balances'),  // FIXED: Changed from 'USDT' to 'USD'
                                       subtitle: Text('CEX.IO: \$${_balances['cex_usd']?.toStringAsFixed(2) ?? '0'}\nKraken: \$${_balances['kraken_usd']?.toStringAsFixed(2) ?? '0'}'),
                                     ),
                             ),
                             Card(
                               child: Column(
                                 children: [
-                                  const ListTile(title: Text('Set Trade Amount (USDT)')),
+                                  const ListTile(title: Text('Set Trade Amount (USD)')),  // FIXED: Changed from 'USDT' to 'USD'
                                   Padding(
                                     padding: const EdgeInsets.symmetric(horizontal: 16),
                                     child: TextFormField(
