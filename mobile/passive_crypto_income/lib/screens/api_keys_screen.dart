@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../providers/api_keys_provider.dart';  // Added: For backend sync
+import '../providers/api_keys_provider.dart';  // For backend sync
 
 class ApiKeysScreen extends StatefulWidget {
   final String userEmail; // Required userEmail parameter
@@ -107,7 +107,7 @@ class _ApiKeysScreenState extends State<ApiKeysScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ApiKeysProvider>(  // Added: Listen to provider for loading/errors
+    return Consumer<ApiKeysProvider>(  // Listen to provider for loading/errors
       builder: (context, provider, child) {
         // Sync controllers to provider state (after load)
         if (provider.cexKey.isNotEmpty) {
@@ -166,7 +166,7 @@ class _ApiKeysScreenState extends State<ApiKeysScreen> {
                                 TextFormField(
                                   controller: _cexSecret,
                                   decoration: const InputDecoration(
-                                    labelText: API Secret',
+                                    labelText: 'API Secret',  // FIXED: Added missing quotes
                                     border: OutlineInputBorder(),
                                   ),
                                   obscureText: true,

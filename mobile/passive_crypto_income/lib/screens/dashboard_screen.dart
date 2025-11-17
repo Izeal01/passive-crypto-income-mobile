@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
-import '../providers/api_keys_provider.dart';  // Added: For auto-refresh listener
+import '../providers/api_keys_provider.dart';  // For auto-refresh listener
 import '../services/api_service.dart';
 import '../services/websocket_service.dart';  // For real-time WS updates
-import 'api_keys_screen.dart';  // For navigation
+// FIXED: Removed unused import 'api_keys_screen.dart'
 
 class DashboardScreen extends StatefulWidget {
   final String userEmail;  // From login
@@ -33,11 +33,11 @@ class DashboardScreenState extends State<DashboardScreen> {  // Public class nam
     _getAutoTradeStatus();
     _connectWebSocket();
 
-    // Added: Listen to provider for key changes (auto-refresh data)
+    // Listen to provider for key changes (auto-refresh data)
     Provider.of<ApiKeysProvider>(context, listen: false).addListener(_onKeysChanged);
   }
 
-  // Added: Auto-refresh on key changes
+  // Auto-refresh on key changes
   void _onKeysChanged() {
     if (mounted) {
       _fetchData();
@@ -71,7 +71,7 @@ class DashboardScreenState extends State<DashboardScreen> {  // Public class nam
     _timer?.cancel();
     _wsSubscription?.cancel();
     WebSocketService().disconnect();  // Clean disconnect
-    // Added: Remove listener
+    // Remove listener
     Provider.of<ApiKeysProvider>(context, listen: false).removeListener(_onKeysChanged);
     super.dispose();
   }
@@ -150,7 +150,7 @@ class DashboardScreenState extends State<DashboardScreen> {  // Public class nam
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ApiKeysProvider>(  // Added: Reactive to provider loading
+    return Consumer<ApiKeysProvider>(  // Reactive to provider loading
       builder: (context, provider, child) {
         return Scaffold(
           appBar: AppBar(

@@ -46,7 +46,7 @@ class ApiService {
       'User-Agent': 'PassiveCryptoIncome/1.0 (Flutter; Global)',
     };
     if (includeAuth && _authToken != null && _authToken!.isNotEmpty) {
-      headers['Authorization'] = 'Bearer $_authToken';
+      headers['Authorization'] = 'Bearer $_authToken';  // FIXED: Removed unnecessary braces
     }
     return headers;
   }

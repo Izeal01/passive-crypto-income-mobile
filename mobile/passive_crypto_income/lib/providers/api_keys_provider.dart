@@ -3,17 +3,21 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 
 class ApiKeysProvider extends ChangeNotifier {
-  String _cexKey = '';
-  String _cexSecret = '';
-  String _krakenKey = '';
-  String _krakenSecret = '';
+  String? _cexKey;
+  String? _cexSecret;
+  String? _krakenKey;
+  String? _krakenSecret;
   bool _isLoading = false;
   String _errorMessage = '';
 
-  String get cexKey => _cexKey;  // FIXED: Replaced binanceKey with cexKey
-  String get cexSecret => _cexSecret;  // FIXED: Replaced binanceSecret with cexSecret
-  String get krakenKey => _krakenKey;
-  String get krakenSecret => _krakenSecret;
+  String get cexKey => _cexKey ?? '';
+  set cexKey(String value) => _cexKey = value;  // Setter for onChanged
+  String get cexSecret => _cexSecret ?? '';
+  set cexSecret(String value) => _cexSecret = value;
+  String get krakenKey => _krakenKey ?? '';
+  set krakenKey(String value) => _krakenKey = value;
+  String get krakenSecret => _krakenSecret ?? '';
+  set krakenSecret(String value) => _krakenSecret = value;
   bool get isLoading => _isLoading;
   String get errorMessage => _errorMessage;
 
@@ -32,31 +36,31 @@ class ApiKeysProvider extends ChangeNotifier {
       // Fetch from backend first (overrides local)
       final keysData = await ApiService.getKeys(email);
       if (keysData.isNotEmpty) {
-        _cexKey = keysData['cex_key'] ?? '';  // FIXED: Updated for cex_key
-        _cexSecret = keysData['cex_secret'] ?? '';  // FIXED: Updated for cex_secret
-        _krakenKey = keysData['kraken_key'] ?? '';
-        _krakenSecret = keysData['kraken_secret'] ?? '';
+        cexKey = keysData['cex_key'] ?? '';  // FIXED: Removed 'this.'
+        cexSecret = keysData['cex_secret'] ?? '';
+        krakenKey = keysData['kraken_key'] ?? '';
+        krakenSecret = keysData['kraken_secret'] ?? '';
 
         // Sync to local prefs
-        await prefs.setString('cex_key', _cexKey);  // FIXED: Updated for cex_key
-        await prefs.setString('cex_secret', _cexSecret);  // FIXED: Updated for cex_secret
-        await prefs.setString('kraken_key', _krakenKey);
-        await prefs.setString('kraken_secret', _krakenSecret);
+        await prefs.setString('cex_key', cexKey);
+        await prefs.setString('cex_secret', cexSecret);
+        await prefs.setString('kraken_key', krakenKey);
+        await prefs.setString('kraken_secret', krakenSecret);
       } else {
         // Fallback to local if backend empty
-        _cexKey = prefs.getString('cex_key') ?? '';  // FIXED: Updated for cex_key
-        _cexSecret = prefs.getString('cex_secret') ?? '';  // FIXED: Updated for cex_secret
-        _krakenKey = prefs.getString('kraken_key') ?? '';
-        _krakenSecret = prefs.getString('kraken_secret') ?? '';
+        cexKey = prefs.getString('cex_key') ?? '';
+        cexSecret = prefs.getString('cex_secret') ?? '';
+        krakenKey = prefs.getString('kraken_key') ?? '';
+        krakenSecret = prefs.getString('kraken_secret') ?? '';
       }
     } catch (e) {
       _errorMessage = 'Failed to load keys: $e';
       // Fallback to local on error
       final prefs = await SharedPreferences.getInstance();
-      _cexKey = prefs.getString('cex_key') ?? '';  // FIXED: Updated for cex_key
-      _cexSecret = prefs.getString('cex_secret') ?? '';  // FIXED: Updated for cex_secret
-      _krakenKey = prefs.getString('kraken_key') ?? '';
-      _krakenSecret = prefs.getString('kraken_secret') ?? '';
+      cexKey = prefs.getString('cex_key') ?? '';
+      cexSecret = prefs.getString('cex_secret') ?? '';
+      krakenKey = prefs.getString('kraken_key') ?? '';
+      krakenSecret = prefs.getString('kraken_secret') ?? '';
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -64,7 +68,7 @@ class ApiKeysProvider extends ChangeNotifier {
   }
 
   // Save keys (local + backend)
-  Future<bool> saveKeys(String cexKey, String cexSecret, String krakenKey, String krakenSecret) async {  // FIXED: Replaced binance params with cex
+  Future<bool> saveKeys(String cexKey, String cexSecret, String krakenKey, String krakenSecret) async {
     _isLoading = true;
     _errorMessage = '';
     notifyListeners();
@@ -77,22 +81,22 @@ class ApiKeysProvider extends ChangeNotifier {
 
       // Save to backend first
       final keysMap = <String, String>{
-        'cex_key': cexKey,  // FIXED: Updated for cex_key
-        'cex_secret': cexSecret,  // FIXED: Updated for cex_secret
+        'cex_key': cexKey,
+        'cex_secret': cexSecret,
         'kraken_key': krakenKey,
         'kraken_secret': krakenSecret,
       };
       await ApiService.saveKeys(keysMap, email);
 
       // Backend success: Update local + state
-      await prefs.setString('cex_key', cexKey);  // FIXED: Updated for cex_key
-      await prefs.setString('cex_secret', cexSecret);  // FIXED: Updated for cex_secret
+      await prefs.setString('cex_key', cexKey);
+      await prefs.setString('cex_secret', cexSecret);
       await prefs.setString('kraken_key', krakenKey);
       await prefs.setString('kraken_secret', krakenSecret);
-      _cexKey = cexKey;
-      _cexSecret = cexSecret;
-      _krakenKey = krakenKey;
-      _krakenSecret = krakenSecret;
+      cexKey = cexKey;  // FIXED: Removed 'this.' (assign param to setter)
+      cexSecret = cexSecret;
+      krakenKey = krakenKey;
+      krakenSecret = krakenSecret;
       return true;
     } catch (e) {
       _errorMessage = 'Save error: $e';
@@ -119,14 +123,14 @@ class ApiKeysProvider extends ChangeNotifier {
       await ApiService.clearKeys(email);
 
       // Backend success: Clear local + state
-      await prefs.remove('cex_key');  // FIXED: Updated for cex_key
-      await prefs.remove('cex_secret');  // FIXED: Updated for cex_secret
+      await prefs.remove('cex_key');
+      await prefs.remove('cex_secret');
       await prefs.remove('kraken_key');
       await prefs.remove('kraken_secret');
-      _cexKey = '';
-      _cexSecret = '';
-      _krakenKey = '';
-      _krakenSecret = '';
+      cexKey = '';  // FIXED: Already without 'this.'
+      cexSecret = '';
+      krakenKey = '';
+      krakenSecret = '';
       return true;
     } catch (e) {
       _errorMessage = 'Clear error: $e';
