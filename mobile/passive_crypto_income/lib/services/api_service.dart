@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'dart:async';
-import 'package:flutter/foundation.dart'; // Correct import for debugPrint (top-level function)
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  static String _baseUrl = 'https://passive-crypto-backend.onrender.com/';  // Updated to HTTPS placeholder for production/global use; replace with actual domain (e.g., Heroku/AWS/Vercel endpoint). Local dev: 'http://192.168.0.3:8000/'
+  // FIXED: Hard-coded to Render for production/release builds
+  static String _baseUrl = 'https://passive-crypto-backend.onrender.com/';
 
   static String? _authToken;
 
@@ -17,13 +18,16 @@ class ApiService {
     await prefs.setString('api_base_url', _baseUrl);
   }
 
+  // FIXED: Force Render URL on first launch or if old local URL cached
   static Future<void> loadBaseUrl() async {
     final prefs = await SharedPreferences.getInstance();
     final savedUrl = prefs.getString('api_base_url');
-    if (savedUrl != null && savedUrl.isNotEmpty) {
+    if (savedUrl == null || !savedUrl.contains('render.com')) {
+      await prefs.setString('api_base_url', _baseUrl);
+    } else {
       _baseUrl = savedUrl.endsWith('/') ? savedUrl : '$savedUrl/';
     }
-    await loadAuthToken();  // Load auth token alongside base URL for seamless init
+    await loadAuthToken();
   }
 
   static Future<void> setAuthToken(String? token) async {
@@ -46,7 +50,7 @@ class ApiService {
       'User-Agent': 'PassiveCryptoIncome/1.0 (Flutter; Global)',
     };
     if (includeAuth && _authToken != null && _authToken!.isNotEmpty) {
-      headers['Authorization'] = 'Bearer $_authToken';  // FIXED: Removed unnecessary braces
+      headers['Authorization'] = 'Bearer $_authToken';
     }
     return headers;
   }
@@ -147,6 +151,7 @@ class ApiService {
   static Future<Map<String, dynamic>> setThreshold(double threshold, String email) async => setTradeThreshold(threshold, email);
 
   static Future<Map<String, dynamic>> fetchArbitrage(String email) async {
+    debugPrint('Fetching arbitrage for $email');  // FIXED: Added debug for call tracking
     final fullUrl = Uri.parse('${baseUrl}arbitrage?email=${Uri.encodeComponent(email)}');
     final response = await http.get(
       fullUrl,
@@ -161,6 +166,7 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> fetchBalances(String email) async {
+    debugPrint('Fetching balances for $email');  // FIXED: Added debug for call tracking
     final fullUrl = Uri.parse('${baseUrl}balances?email=${Uri.encodeComponent(email)}');
     final response = await http.get(
       fullUrl,
