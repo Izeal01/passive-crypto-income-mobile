@@ -17,7 +17,7 @@ class DashboardScreenState extends State<DashboardScreen> {
   Map<String, dynamic> _arbitrageData = {};
   Map<String, dynamic> _balances = {};
   bool _autoTradeEnabled = false;
-  double _tradeThreshold = 0.0001; // 0.01%
+  double _tradeThreshold = 0.0001;
   double _tradeAmount = 100.0;
   bool _isLoading = true;
   bool _wsLoading = true;
@@ -28,7 +28,7 @@ class DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _fetchData();
-    // 8-second polling — safe for CEX.IO and Kraken free tiers
+    // 8-second polling – safe for free CEX.IO & Kraken tiers
     _timer = Timer.periodic(const Duration(seconds: 8), (_) => _fetchData());
     _getAutoTradeStatus();
     _connectWebSocket();
@@ -86,6 +86,7 @@ class DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _getAutoTradeStatus() async {
+    // Placeholder – implement if you have real endpoint
     if (mounted) setState(() => _autoTradeEnabled = false);
   }
 
@@ -102,81 +103,74 @@ class DashboardScreenState extends State<DashboardScreen> {
         );
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Toggle failed: $e'), backgroundColor: Colors.red),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Toggle failed: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
   Future<void> _setThreshold(double value) async {
     try {
       await ApiService.setTradeThreshold(value, widget.userEmail);
-      if (mounted) {
-        setState(() => _tradeThreshold = value);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Threshold set to ${(value * 100).toStringAsFixed(4)}%'), backgroundColor: Colors.green),
-        );
-      }
+      setState(() => _tradeThreshold = value);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Threshold set to ${(value * 100).toStringAsFixed(4)}%'), backgroundColor: Colors.green),
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Set failed: $e'), backgroundColor: Colors.red));
-      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red));
     }
   }
 
   Future<void> _setAmount() async {
-    final value = _tradeAmount;
     try {
-      await ApiService.setAmount(value, widget.userEmail);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Amount set to \$${value.toStringAsFixed(2)}'), backgroundColor: Colors.green),
-        );
-      }
+      await ApiService.setAmount(_tradeAmount, widget.userEmail);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Trade amount set to \$${_tradeAmount.toStringAsFixed(2)}'), backgroundColor: Colors.green),
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Set failed: $e'), backgroundColor: Colors.red));
-      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red));
     }
   }
 
-  // Beautiful arbitrage subtitle with ROI
+  // FINAL: Beautiful arbitrage subtitle with ROI displayed
   Widget _buildArbitrageSubtitle() {
     if (_arbitrageData['error'] != null) {
       return Text(
-        _arbitrageData['error'],
-        style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+        _arbitrageData['error'] ?? 'Waiting for data...',
+        style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),
       );
     }
 
-    final cex = _arbitrageData['cex']?.toStringAsFixed(4) ?? '—';
-    final kraken = _arbitrageData['kraken']?.toStringAsFixed(4) ?? '—';
+    final cex = _arbitrageData['cex']?.toStringAsFixed(6) ?? '—';
+    final kraken = _arbitrageData['kraken']?.toStringAsFixed(6) ?? '—';
     final spread = (_arbitrageData['spread_pct'] ?? 0).toStringAsFixed(4);
     final roi = _arbitrageData['roi_usdt'];
-    final profitable = (_arbitrageData['pnl'] ?? 0) > 0;
+    final pnlPct = _arbitrageData['pnl_pct'];
+    final isProfitable = (pnlPct ?? 0) > 0 || (roi ?? -999) > 0;
 
     if (roi != null) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("CEX: $cex USDT | Kraken: $kraken USD"),
-          const SizedBox(height: 4),
+          Text("CEX.IO: $cex USDT  •  Kraken: $kraken USD"),
+          const SizedBox(height: 6),
           Text(
-            "Spread: $spread% • Potential ROI: \$${roi.toStringAsFixed(2)}",
+            "Spread: $spread%  •  Potential Profit: \$${roi.toStringAsFixed(2)}",
             style: TextStyle(
-              color: profitable ? Colors.green : Colors.red,
+              color: isProfitable ? Colors.green : Colors.red,
               fontWeight: FontWeight.bold,
-              fontSize: 15,
+              fontSize: 16,
             ),
           ),
         ],
       );
     }
 
-    // Partial data (rate-limit fallback)
-    return Text("CEX: $cex USDT | Kraken: $kraken USD | Spread: $spread%");
+    // Fallback when ROI not available (partial data)
+    return Text(
+      "CEX.IO: $cex USDT  •  Kraken: $kraken USD  •  Spread: $spread%",
+      style: const TextStyle(fontSize: 14),
+    );
   }
 
   @override
@@ -184,10 +178,7 @@ class DashboardScreenState extends State<DashboardScreen> {
     return Consumer<ApiKeysProvider>(
       builder: (context, provider, child) {
         return Scaffold(
-          appBar: AppBar(
-            title: const Text('Dashboard'),
-            backgroundColor: Colors.green,
-          ),
+          appBar: AppBar(title: const Text('Dashboard'), backgroundColor: Colors.green),
           body: provider.isLoading || _isLoading
               ? const Center(child: CircularProgressIndicator())
               : RefreshIndicator(
@@ -197,36 +188,42 @@ class DashboardScreenState extends State<DashboardScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Arbitrage Card
+                        // Arbitrage Opportunity Card
                         Card(
+                          elevation: 4,
                           child: ListTile(
-                            leading: _wsLoading ? const CircularProgressIndicator() : const Icon(Icons.swap_horiz, color: Colors.purple),
-                            title: const Text('Arbitrage'),
+                            leading: _wsLoading
+                                ? const CircularProgressIndicator()
+                                : const Icon(Icons.swap_horiz, color: Colors.purple, size: 40),
+                            title: const Text('Live Arbitrage Opportunity', style: TextStyle(fontWeight: FontWeight.bold)),
                             subtitle: _buildArbitrageSubtitle(),
                           ),
                         ),
 
-                        // Auto Trading
+                        const SizedBox(height: 10),
+
+                        // Auto Trading Switch
                         Card(
                           child: SwitchListTile(
                             title: const Text('Auto Trading'),
-                            subtitle: const Text('Toggle to enable profitable trades'),
+                            subtitle: const Text('Execute profitable trades automatically'),
                             value: _autoTradeEnabled,
                             onChanged: _toggleAutoTrade,
-                            secondary: const Icon(Icons.autorenew),
+                            secondary: const Icon(Icons.autorenew, color: Colors.blue),
                           ),
                         ),
 
-                        // Threshold
+                        // Trade Threshold
                         Card(
                           child: Column(
                             children: [
-                              const ListTile(title: Text('Trade Threshold (%)')),
+                              const ListTile(title: Text('Minimum Profit Threshold (%)')),
                               Slider(
                                 value: _tradeThreshold,
                                 min: 0.0,
                                 max: 0.01,
                                 divisions: 100,
+                                label: '${(_tradeThreshold * 100).toStringAsFixed(4)}%',
                                 onChanged: _setThreshold,
                               ),
                               Padding(
@@ -246,9 +243,10 @@ class DashboardScreenState extends State<DashboardScreen> {
                                   subtitle: Text(_balances['error'], style: const TextStyle(color: Colors.red)),
                                 )
                               : ListTile(
-                                  title: const Text('USD Balances'),
+                                  title: const Text('Available USD Balances'),
                                   subtitle: Text(
-                                    'CEX.IO: \$${_balances['cex_usd']?.toStringAsFixed(2) ?? '0.00'}\nKraken: \$${_balances['kraken_usd']?.toStringAsFixed(2) ?? '0.00'}',
+                                    'CEX.IO (USDT): \$${(_balances['cex_usd'] ?? 0).toStringAsFixed(2)}\nKraken (USD): \$${(_balances['kraken_usd'] ?? 0).toStringAsFixed(2)}',
+                                    style: const TextStyle(fontSize: 16),
                                   ),
                                 ),
                         ),
@@ -257,25 +255,31 @@ class DashboardScreenState extends State<DashboardScreen> {
                         Card(
                           child: Column(
                             children: [
-                              const ListTile(title: Text('Set Trade Amount (USD)')),
+                              const ListTile(title: Text('Trade Amount per Opportunity (USD)')),
                               Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                padding: const EdgeInsets.all(16),
                                 child: TextFormField(
                                   initialValue: _tradeAmount.toStringAsFixed(2),
-                                  decoration: const InputDecoration(
-                                    labelText: 'Trade Amount',
-                                    prefixText: r'$',
-                                    prefixIcon: Icon(Icons.account_balance_wallet),
-                                  ),
                                   keyboardType: TextInputType.numberWithOptions(decimal: true),
+                                  decoration: const InputDecoration(
+                                    prefixText: r'$ ',
+                                    labelText: 'Amount',
+                                    border: OutlineInputBorder(),
+                                  ),
                                   onChanged: (v) => _tradeAmount = double.tryParse(v) ?? _tradeAmount,
                                 ),
                               ),
-                              const SizedBox(height: 16),
-                              ElevatedButton(
-                                onPressed: _isLoading ? null : _setAmount,
-                                child: _isLoading ? const CircularProgressIndicator() : const Text('Set Amount'),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                child: SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton(
+                                    onPressed: _setAmount,
+                                    child: const Text('Update Amount'),
+                                  ),
+                                ),
                               ),
+                              const SizedBox(height: 10),
                             ],
                           ),
                         ),
