@@ -17,7 +17,7 @@ class DashboardScreenState extends State<DashboardScreen> {
   Map<String, dynamic> _arbitrageData = {};
   Map<String, dynamic> _balances = {};
   bool _autoTradeEnabled = false;
-  double _tradeThreshold = 0.0001;
+  double _tradeThreshold = 0.0001; // 0.01%
   double _tradeAmount = 100.0;
   bool _isLoading = true;
   bool _wsLoading = true;
@@ -28,7 +28,7 @@ class DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _fetchData();
-    // FIXED #3: Reduced polling to 8 seconds to stay under exchange rate limits
+    // 8-second polling — safe for CEX.IO and Kraken free tiers
     _timer = Timer.periodic(const Duration(seconds: 8), (_) => _fetchData());
     _getAutoTradeStatus();
     _connectWebSocket();
@@ -142,7 +142,7 @@ class DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  // FIXED #2: Smart subtitle builder for arbitrage card
+  // Beautiful arbitrage subtitle with ROI
   Widget _buildArbitrageSubtitle() {
     if (_arbitrageData['error'] != null) {
       return Text(
@@ -151,27 +151,32 @@ class DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
-    final cexPrice = _arbitrageData['cex']?.toStringAsFixed(4);
-    final krakenPrice = _arbitrageData['kraken']?.toStringAsFixed(4);
+    final cex = _arbitrageData['cex']?.toStringAsFixed(4) ?? '—';
+    final kraken = _arbitrageData['kraken']?.toStringAsFixed(4) ?? '—';
     final spread = (_arbitrageData['spread_pct'] ?? 0).toStringAsFixed(4);
+    final roi = _arbitrageData['roi_usdt'];
+    final profitable = (_arbitrageData['pnl'] ?? 0) > 0;
 
-    final cexError = _arbitrageData['cex_error'];
-    final krakenError = _arbitrageData['kraken_error'];
-
-    if (cexError != null || krakenError != null) {
-      return Text(
-        "Partial: CEX ${cexError ?? 'OK'} | Kraken ${krakenError ?? 'OK'}",
-        style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),
+    if (roi != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("CEX: $cex USDT | Kraken: $kraken USD"),
+          const SizedBox(height: 4),
+          Text(
+            "Spread: $spread% • Potential ROI: \$${roi.toStringAsFixed(2)}",
+            style: TextStyle(
+              color: profitable ? Colors.green : Colors.red,
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+            ),
+          ),
+        ],
       );
     }
 
-    return Text(
-      "CEX: ${cexPrice ?? '—'} USDT | Kraken: ${krakenPrice ?? '—'} USD | Spread: $spread%",
-      style: TextStyle(
-        color: ( _arbitrageData['pnl'] ?? 0 ) > 0 ? Colors.green : Colors.red,
-        fontWeight: FontWeight.bold,
-      ),
-    );
+    // Partial data (rate-limit fallback)
+    return Text("CEX: $cex USDT | Kraken: $kraken USD | Spread: $spread%");
   }
 
   @override
@@ -192,7 +197,7 @@ class DashboardScreenState extends State<DashboardScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Arbitrage Card – now shows partial data & errors
+                        // Arbitrage Card
                         Card(
                           child: ListTile(
                             leading: _wsLoading ? const CircularProgressIndicator() : const Icon(Icons.swap_horiz, color: Colors.purple),
@@ -243,7 +248,7 @@ class DashboardScreenState extends State<DashboardScreen> {
                               : ListTile(
                                   title: const Text('USD Balances'),
                                   subtitle: Text(
-                                    'CEX.IO: \$${(_balances['cex_usd'] ?? 0).toStringAsFixed(2)}\nKraken: \$${(_balances['kraken_usd'] ?? 0).toStringAsFixed(2)}',
+                                    'CEX.IO: \$${_balances['cex_usd']?.toStringAsFixed(2) ?? '0.00'}\nKraken: \$${_balances['kraken_usd']?.toStringAsFixed(2) ?? '0.00'}',
                                   ),
                                 ),
                         ),
