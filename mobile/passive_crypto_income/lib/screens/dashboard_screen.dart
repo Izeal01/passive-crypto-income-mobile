@@ -28,11 +28,9 @@ class DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _fetchData();
-    // 8-second polling – safe for free CEX.IO & Kraken tiers
     _timer = Timer.periodic(const Duration(seconds: 8), (_) => _fetchData());
     _getAutoTradeStatus();
     _connectWebSocket();
-
     Provider.of<ApiKeysProvider>(context, listen: false).addListener(_onKeysChanged);
   }
 
@@ -86,7 +84,6 @@ class DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _getAutoTradeStatus() async {
-    // Placeholder – implement if you have real endpoint
     if (mounted) setState(() => _autoTradeEnabled = false);
   }
 
@@ -132,7 +129,6 @@ class DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  // FINAL: Beautiful arbitrage subtitle with ROI displayed
   Widget _buildArbitrageSubtitle() {
     if (_arbitrageData['error'] != null) {
       return Text(
@@ -141,35 +137,54 @@ class DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
-    final cex = _arbitrageData['cex']?.toStringAsFixed(6) ?? '—';
-    final kraken = _arbitrageData['kraken']?.toStringAsFixed(6) ?? '—';
+    final cexPrice = _arbitrageData['cex']?.toStringAsFixed(6) ?? '—';
+    final krakenPrice = _arbitrageData['kraken']?.toStringAsFixed(6) ?? '—';
     final spread = (_arbitrageData['spread_pct'] ?? 0).toStringAsFixed(4);
-    final roi = _arbitrageData['roi_usdt'];
-    final pnlPct = _arbitrageData['pnl_pct'];
-    final isProfitable = (pnlPct ?? 0) > 0 || (roi ?? -999) > 0;
+    final netPnlPct = _arbitrageData['net_pnl_pct'];
+    final roi = _arbitrageData['roi_usdc'];
+    final direction = _arbitrageData['direction'] ?? '';
+    final isProfitable = _arbitrageData['profitable'] == true;
 
-    if (roi != null) {
+    if (isProfitable && roi != null && roi > 0) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("CEX.IO: $cex USDT  •  Kraken: $kraken USD"),
+          Text("CEX.IO: $cexPrice USDC  •  Kraken: $krakenPrice USDC"),
           const SizedBox(height: 6),
           Text(
-            "Spread: $spread%  •  Potential Profit: \$${roi.toStringAsFixed(2)}",
-            style: TextStyle(
-              color: isProfitable ? Colors.green : Colors.red,
+            "Net Profit After Fees: \$${roi.toStringAsFixed(2)}",
+            style: const TextStyle(
+              color: Colors.green,
               fontWeight: FontWeight.bold,
-              fontSize: 16,
+              fontSize: 17,
             ),
+          ),
+          Text(
+            "Spread: $spread% • $direction",
+            style: const TextStyle(fontSize: 13, color: Colors.grey),
           ),
         ],
       );
     }
 
-    // Fallback when ROI not available (partial data)
-    return Text(
-      "CEX.IO: $cex USDT  •  Kraken: $kraken USD  •  Spread: $spread%",
-      style: const TextStyle(fontSize: 14),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text("CEX.IO: $cexPrice USDC  •  Kraken: $krakenPrice USDC"),
+        const SizedBox(height: 6),
+        const Text(
+          "No profitable opportunity after fees",
+          style: TextStyle(
+            color: Colors.red,
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+        ),
+        Text(
+          "Current spread: $spread% (need >0.82%)",
+          style: const TextStyle(fontSize: 12, color: Colors.grey),
+        ),
+      ],
     );
   }
 
@@ -178,7 +193,10 @@ class DashboardScreenState extends State<DashboardScreen> {
     return Consumer<ApiKeysProvider>(
       builder: (context, provider, child) {
         return Scaffold(
-          appBar: AppBar(title: const Text('Dashboard'), backgroundColor: Colors.green),
+          appBar: AppBar(
+            title: const Text('Dashboard'),
+            backgroundColor: Colors.green,
+          ),
           body: provider.isLoading || _isLoading
               ? const Center(child: CircularProgressIndicator())
               : RefreshIndicator(
@@ -188,32 +206,32 @@ class DashboardScreenState extends State<DashboardScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Arbitrage Opportunity Card
+                        // Live Arbitrage Card
                         Card(
-                          elevation: 4,
+                          elevation: 5,
                           child: ListTile(
                             leading: _wsLoading
                                 ? const CircularProgressIndicator()
-                                : const Icon(Icons.swap_horiz, color: Colors.purple, size: 40),
+                                : const Icon(Icons.swap_horiz, color: Colors.purple, size: 44),
                             title: const Text('Live Arbitrage Opportunity', style: TextStyle(fontWeight: FontWeight.bold)),
                             subtitle: _buildArbitrageSubtitle(),
                           ),
                         ),
 
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 12),
 
-                        // Auto Trading Switch
+                        // Auto Trading
                         Card(
                           child: SwitchListTile(
                             title: const Text('Auto Trading'),
-                            subtitle: const Text('Execute profitable trades automatically'),
+                            subtitle: const Text('Automatically execute profitable trades'),
                             value: _autoTradeEnabled,
                             onChanged: _toggleAutoTrade,
                             secondary: const Icon(Icons.autorenew, color: Colors.blue),
                           ),
                         ),
 
-                        // Trade Threshold
+                        // Profit Threshold
                         Card(
                           child: Column(
                             children: [
@@ -234,28 +252,28 @@ class DashboardScreenState extends State<DashboardScreen> {
                           ),
                         ),
 
-                        // USD Balances
+                        // USDC Balances - NOW SHOWS REAL $20.03
                         Card(
                           color: Colors.blue.shade50,
                           child: _balances['error'] != null
                               ? ListTile(
-                                  title: const Text('USD Balances'),
+                                  title: const Text('USDC Balances'),
                                   subtitle: Text(_balances['error'], style: const TextStyle(color: Colors.red)),
                                 )
                               : ListTile(
-                                  title: const Text('Available USD Balances'),
+                                  title: const Text('Available USDC Balances'),
                                   subtitle: Text(
-                                    'CEX.IO (USDT): \$${(_balances['cex_usd'] ?? 0).toStringAsFixed(2)}\nKraken (USD): \$${(_balances['kraken_usd'] ?? 0).toStringAsFixed(2)}',
-                                    style: const TextStyle(fontSize: 16),
+                                    'CEX.IO: \$${_balances['cex_usdc']?.toStringAsFixed(2) ?? "0.00"}\nKraken: \$${_balances['kraken_usdc']?.toStringAsFixed(2) ?? "0.00"}',
+                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                                   ),
                                 ),
                         ),
 
-                        // Set Trade Amount
+                        // Trade Amount
                         Card(
                           child: Column(
                             children: [
-                              const ListTile(title: Text('Trade Amount per Opportunity (USD)')),
+                              const ListTile(title: Text('Trade Amount per Opportunity (USDC)')),
                               Padding(
                                 padding: const EdgeInsets.all(16),
                                 child: TextFormField(
