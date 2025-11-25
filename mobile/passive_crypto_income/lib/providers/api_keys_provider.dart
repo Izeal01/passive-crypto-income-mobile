@@ -12,8 +12,8 @@ class ApiKeysProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setLoading(bool value) {
-    _isLoading = value;
+  void setLoading(bool loading) {
+    _isLoading = loading;
     notifyListeners();
   }
 }

@@ -31,6 +31,8 @@ class DashboardScreenState extends State<DashboardScreen> {
     _timer = Timer.periodic(const Duration(seconds: 8), (_) => _fetchData());
     _getAutoTradeStatus();
     _connectWebSocket();
+
+    // Safe: listener added in initState, context is valid
     Provider.of<ApiKeysProvider>(context, listen: false).addListener(_onKeysChanged);
   }
 
@@ -40,20 +42,19 @@ class DashboardScreenState extends State<DashboardScreen> {
 
   void _connectWebSocket() {
     WebSocketService().connect(onData: (wsData) {
-      if (mounted) {
-        setState(() {
-          _arbitrageData = wsData;
-          _wsLoading = false;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _arbitrageData = wsData;
+        _wsLoading = false;
+      });
     });
+
     _wsSubscription = WebSocketService().stream.listen((wsData) {
-      if (mounted) {
-        setState(() {
-          _arbitrageData = wsData;
-          _wsLoading = false;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _arbitrageData = wsData;
+        _wsLoading = false;
+      });
     });
   }
 
@@ -62,44 +63,53 @@ class DashboardScreenState extends State<DashboardScreen> {
     _timer?.cancel();
     _wsSubscription?.cancel();
     WebSocketService().disconnect();
+    // Safe: removeListener called in dispose
     Provider.of<ApiKeysProvider>(context, listen: false).removeListener(_onKeysChanged);
     super.dispose();
   }
 
   Future<void> _fetchData() async {
+    if (!mounted) return;
+
     try {
       final arb = await ApiService.fetchArbitrage(widget.userEmail);
       final bal = await ApiService.fetchBalances(widget.userEmail);
-      if (mounted) {
-        setState(() {
-          _arbitrageData = arb;
-          _balances = bal;
-          _isLoading = false;
-        });
-      }
+
+      if (!mounted) return;
+      setState(() {
+        _arbitrageData = arb;
+        _balances = bal;
+        _isLoading = false;
+      });
     } catch (e) {
       debugPrint('Fetch Error: $e');
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   Future<void> _getAutoTradeStatus() async {
-    if (mounted) setState(() => _autoTradeEnabled = false);
+    if (mounted) {
+      setState(() => _autoTradeEnabled = false);
+    }
   }
 
   Future<void> _toggleAutoTrade(bool enabled) async {
     try {
       await ApiService.toggleAutoTrade(enabled, widget.userEmail);
-      if (mounted) {
-        setState(() => _autoTradeEnabled = enabled);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Auto-Trade ${enabled ? "Enabled" : "Disabled"}'),
-            backgroundColor: enabled ? Colors.green : Colors.orange,
-          ),
-        );
-      }
+
+      if (!mounted) return;
+      setState(() => _autoTradeEnabled = enabled);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Auto-Trade ${enabled ? "Enabled" : "Disabled"}'),
+          backgroundColor: enabled ? Colors.green : Colors.orange,
+        ),
+      );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Toggle failed: $e'), backgroundColor: Colors.red),
       );
@@ -109,23 +119,40 @@ class DashboardScreenState extends State<DashboardScreen> {
   Future<void> _setThreshold(double value) async {
     try {
       await ApiService.setTradeThreshold(value, widget.userEmail);
+
+      if (!mounted) return;
       setState(() => _tradeThreshold = value);
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Threshold set to ${(value * 100).toStringAsFixed(4)}%'), backgroundColor: Colors.green),
+        SnackBar(
+          content: Text('Threshold set to ${(value * 100).toStringAsFixed(4)}%'),
+          backgroundColor: Colors.green,
+        ),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
   Future<void> _setAmount() async {
     try {
       await ApiService.setAmount(_tradeAmount, widget.userEmail);
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Trade amount set to \$${_tradeAmount.toStringAsFixed(2)}'), backgroundColor: Colors.green),
+        SnackBar(
+          content: Text('Trade amount set to \$${_tradeAmount.toStringAsFixed(2)}'),
+          backgroundColor: Colors.green,
+        ),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -140,7 +167,6 @@ class DashboardScreenState extends State<DashboardScreen> {
     final cexPrice = _arbitrageData['cex']?.toStringAsFixed(6) ?? '—';
     final krakenPrice = _arbitrageData['kraken']?.toStringAsFixed(6) ?? '—';
     final spread = (_arbitrageData['spread_pct'] ?? 0).toStringAsFixed(4);
-    final netPnlPct = _arbitrageData['net_pnl_pct'];
     final roi = _arbitrageData['roi_usdc'];
     final direction = _arbitrageData['direction'] ?? '';
     final isProfitable = _arbitrageData['profitable'] == true;
@@ -252,7 +278,7 @@ class DashboardScreenState extends State<DashboardScreen> {
                           ),
                         ),
 
-                        // USDC Balances - NOW SHOWS REAL $20.03
+                        // USDC Balances
                         Card(
                           color: Colors.blue.shade50,
                           child: _balances['error'] != null
