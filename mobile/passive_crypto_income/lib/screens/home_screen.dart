@@ -1,13 +1,12 @@
+// lib/screens/home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../providers/api_keys_provider.dart';  // Added: For auto-refresh listener
-import '../services/api_service.dart';  // For clearing auth token and fetching balances
-import 'dashboard_screen.dart';
+import '../providers/api_keys_provider.dart';
+import '../services/api_service.dart';
 import 'api_keys_screen.dart';
-import 'login_screen.dart';
+import 'dashboard_screen.dart';
 
-class HomeScreen extends StatefulWidget {  // FIXED: 'StatefulWidget' (was 'StatefuleWidget')
+class HomeScreen extends StatefulWidget {
   final String userEmail;
   const HomeScreen({super.key, required this.userEmail});
 
@@ -16,159 +15,146 @@ class HomeScreen extends StatefulWidget {  // FIXED: 'StatefulWidget' (was 'Stat
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  bool _loading = true;
-  Map<String, dynamic> _balances = {};  // For displaying balances
+  bool _hasKeys = false;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    // Quick status fetch on entry
-    _fetchBalances();  // Fetch balances on init
-    _loading = false;
-
-    // Added: Listen to provider for key changes (auto-refresh balances)
-    Provider.of<ApiKeysProvider>(context, listen: false).addListener(_onKeysChanged);
+    _checkApiKeys();
   }
 
-  // Added: Auto-refresh on key changes
-  void _onKeysChanged() {
-    if (mounted) {
-      _fetchBalances();
-    }
-  }
+  Future<void> _checkApiKeys() async {
+    if (!mounted) return;
 
-  // Fetch balances similar to Dashboard
-  Future<void> _fetchBalances() async {
+    setState(() => _isLoading = true);
+
     try {
-      final bal = await ApiService.fetchBalances(widget.userEmail);
-      if (mounted) {
-        setState(() {
-          _balances = bal;
-        });
-      }
+      final keys = await ApiService.getKeys(widget.userEmail);
+      final hasKeys = keys['cex_key'] != null && keys['kraken_key'] != null;
+
+      if (!mounted) return;
+      setState(() {
+        _hasKeys = hasKeys;
+        _isLoading = false;
+      });
+
+      // Update provider so dashboard knows keys are saved
+      Provider.of<ApiKeysProvider>(context, listen: false).setKeysSaved(hasKeys);
     } catch (e) {
-      debugPrint('Balances fetch error: $e');
-      if (mounted) {
-        setState(() {
-          _balances = {'error': 'Failed to load balances. Ensure API keys are set and synced.'};
-        });
-      }
+      debugPrint('Error checking API keys: $e');
+      if (!mounted) return;
+      setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _logout() async {
-    try {
-      // Clear local auth state
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('user_email');
-      await prefs.remove('auth_token');
-      await ApiService.setAuthToken(null);  // Clear static token
+  Future<void> _openApiKeysScreen() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ApiKeysScreen(userEmail: widget.userEmail),
+      ),
+    );
 
-      // Optional: Clear API keys if desired (uncomment if logout should wipe them)
-      // await prefs.remove('cex_key');
-      // await prefs.remove('cex_secret');
-      // await prefs.remove('kraken_key');
-      // await prefs.remove('kraken_secret');
-
-      // Navigate to login (pushReplacement to prevent back navigation)
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const LoginScreen()),
-        );
-      }
-    } catch (e) {
-      // Handle any clear errors (e.g., show snackbar)
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Logout failed: $e'), backgroundColor: Colors.red),
-        );
-      }
+    // Prevent context usage after async gap
+    if (!mounted) return;
+    if (result == true) {
+      _checkApiKeys(); // Refresh key status after update
     }
-  }
-
-  @override
-  void dispose() {
-    // Added: Remove listener
-    Provider.of<ApiKeysProvider>(context, listen: false).removeListener(_onKeysChanged);
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ApiKeysProvider>(  // Added: Reactive to provider loading
-      builder: (context, provider, child) {
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Home'),
-            actions: [
-              // API Keys icon removed (moved to body below welcome)
-              IconButton(
-                icon: const Icon(Icons.dashboard),
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => DashboardScreen(userEmail: widget.userEmail)),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.logout),
-                onPressed: _logout,
-              ),
-            ],
-          ),
-          body: provider.isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : SingleChildScrollView(  // Scrollable for added content
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.trending_up, size: 100, color: Colors.green),
-                          const SizedBox(height: 16),
-                          const Text('Welcome to Passive Crypto Income', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 8),
-                          const Text('Tap Dashboard to get started with arbitrage opportunities', style: TextStyle(fontSize: 16, color: Colors.grey)),
-                          const SizedBox(height: 24),  // Spacing below welcome
-                          // API Settings button below welcome
-                          Card(
-                            child: ListTile(
-                              leading: const Icon(Icons.key, color: Colors.blue),
-                              title: const Text('Manage API Keys'),
-                              subtitle: const Text('Set up your CEX.IO and Kraken API credentials'),
-                              trailing: const Icon(Icons.arrow_forward_ios),
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => ApiKeysScreen(userEmail: widget.userEmail)),
-                              ),
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Passive Crypto Income'),
+        backgroundColor: Colors.green,
+        elevation: 4,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: _hasKeys
+              ? Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.check_circle, color: Colors.green, size: 100),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'API Keys Connected',
+                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'You\'re ready to monitor arbitrage opportunities!',
+                      style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 40),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => DashboardScreen(userEmail: widget.userEmail),
                             ),
-                          ),
-                          const SizedBox(height: 24),  // Spacing before balances
-                          // Balances Card (similar to Dashboard)
-                          Card(
-                            color: Colors.blue.shade50,
-                            child: _balances['error'] != null
-                                ? ListTile(
-                                    title: const Text('USD Balances'),
-                                    subtitle: Text(_balances['error'] ?? 'Loading...', style: const TextStyle(color: Colors.red)),
-                                  )
-                                : ListTile(
-                                    title: const Text('USD Balances'),
-                                    subtitle: Text(
-                                      'CEX.IO: \$${_balances['cex_usd']?.toStringAsFixed(2) ?? '0.00'}\nKraken: \$${_balances['kraken_usd']?.toStringAsFixed(2) ?? '0.00'}',
-                                    ),
-                                    trailing: IconButton(
-                                      icon: const Icon(Icons.refresh),
-                                      onPressed: _fetchBalances,  // Refresh button
-                                    ),
-                                  ),
-                          ),
-                        ],
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          backgroundColor: Colors.green,
+                        ),
+                        child: const Text('Go to Dashboard', style: TextStyle(fontSize: 18)),
                       ),
                     ),
-        );
-      },
+                    const SizedBox(height: 16),
+                    TextButton(
+                      onPressed: _openApiKeysScreen,
+                      child: const Text('Replace API Keys'),
+                    ),
+                  ],
+                )
+              : Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.vpn_key_off, size: 100, color: Colors.grey),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'No API Keys Found',
+                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Connect your CEX.IO and Kraken accounts to start earning passive income.',
+                      style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 40),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _openApiKeysScreen,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          backgroundColor: Colors.green,
+                        ),
+                        child: const Text('Connect Exchanges', style: TextStyle(fontSize: 18)),
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      ),
     );
   }
 }
