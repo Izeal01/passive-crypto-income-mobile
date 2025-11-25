@@ -18,7 +18,7 @@ class ApiService {
     await prefs.setString('api_base_url', _baseUrl);
   }
 
-  // FIXED: Force Render URL on first launch or if old local URL cached
+  // Force Render URL on first launch or if old local URL cached
   static Future<void> loadBaseUrl() async {
     final prefs = await SharedPreferences.getInstance();
     final savedUrl = prefs.getString('api_base_url');
@@ -55,26 +55,32 @@ class ApiService {
     return headers;
   }
 
-  static Future<Map<String, dynamic>> postWithRetry(String endpoint, Map<String, dynamic> data, {int retries = 3}) async {
+  static Future<Map<String, dynamic>> postWithRetry(
+    String endpoint,
+    Map<String, dynamic> data, {
+    int retries = 3,
+  }) async {
     final path = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
     final fullUrl = Uri.parse('${baseUrl}$path');
     final bodyStr = json.encode(data);
-    debugPrint('DEBUG: Posting to $fullUrl with body: $bodyStr');
+    debugPrint('POST → $fullUrl | Body: $bodyStr');
+
     for (int i = 0; i < retries; i++) {
       try {
         final response = await http.post(
           fullUrl,
-          headers: _getHeaders(includeAuth: endpoint != '/login' && endpoint != '/signup'),  // Exclude auth for login/signup
-          body: bodyStr,  // Use pre-encoded bodyStr to avoid duplicate encoding
+          headers: _getHeaders(includeAuth: endpoint != '/login' && endpoint != '/signup'),
+          body: bodyStr,
         ).timeout(const Duration(seconds: 20));
+
         final preview = response.body.length > 200
             ? '${response.body.substring(0, 200)}...'
             : response.body;
-        debugPrint('DEBUG: Response status: $response.statusCode, body preview: $preview');
+        debugPrint('Response: ${response.statusCode} | $preview');
+
         if (response.statusCode == 200) {
           final decoded = json.decode(response.body);
           if (decoded is Map<String, dynamic>) {
-            // Auto-save token if returned in response (assumes backend returns {'token': '...'} on success)
             if (decoded.containsKey('token') && (endpoint == '/login' || endpoint == '/signup')) {
               await setAuthToken(decoded['token']);
             }
@@ -83,56 +89,43 @@ class ApiService {
             throw Exception('Invalid JSON response structure');
           }
         } else {
-          throw Exception('HTTP $response.statusCode: $response.body');
+          throw Exception('HTTP ${response.statusCode}: ${response.body}');
         }
       } catch (e) {
-        debugPrint('Attempt ${i+1}/$retries failed: $e');
-        if (i == retries - 1) {
-          rethrow;
-        }
+        debugPrint('Attempt ${i + 1}/$retries failed: $e');
+        if (i == retries - 1) rethrow;
         await Future.delayed(Duration(seconds: (i + 1) * 2));
       }
     }
-    throw Exception('Retries exhausted after $retries attempts');
+    throw Exception('Retries exhausted');
   }
 
-  static Future<Map<String, dynamic>> login(Map<String, String> user) async {
-    final result = await postWithRetry('/login', user);
-    // Caller can access result['token'] if needed, but auto-saved above
-    return result;
-  }
+  // Auth
+  static Future<Map<String, dynamic>> login(Map<String, String> user) async => await postWithRetry('/login', user);
+  static Future<Map<String, dynamic>> signup(Map<String, String> user) async => await postWithRetry('/signup', user);
 
-  static Future<Map<String, dynamic>> signup(Map<String, String> user) async {
-    final result = await postWithRetry('/signup', user);
-    // Caller can access result['token'] if needed, but auto-saved above
-    return result;
-  }
-
+  // API Keys
   static Future<Map<String, dynamic>> saveKeys(Map<String, String> keys, String email) async {
     final data = <String, dynamic>{'email': email, ...keys};
-    debugPrint('Sending save keys: email: $email, keys: ${keys.keys.join(', ')}');
     return await postWithRetry('/save_keys', data);
   }
 
   static Future<Map<String, dynamic>> clearKeys(String email) async {
-    debugPrint('Sending clear keys: email: $email');
     return await postWithRetry('/clear_keys', {'email': email});
   }
 
   static Future<Map<String, dynamic>> getKeys(String email) async {
     final fullUrl = Uri.parse('${baseUrl}get_keys?email=${Uri.encodeComponent(email)}');
-    final response = await http.get(
-      fullUrl,
-      headers: _getHeaders(),  // Includes auth token
-    ).timeout(const Duration(seconds: 20));
+    final response = await http.get(fullUrl, headers: _getHeaders()).timeout(const Duration(seconds: 20));
     if (response.statusCode == 200) {
       final decoded = json.decode(response.body);
       if (decoded is Map<String, dynamic>) return decoded;
-      throw Exception('Invalid JSON response structure');
+      throw Exception('Invalid response');
     }
-    throw Exception('Get keys failed: $response.body');
+    throw Exception('Get keys failed: ${response.body}');
   }
 
+  // Settings
   static Future<Map<String, dynamic>> setAmount(double amount, String email) async {
     return await postWithRetry('/set_amount', {'amount': amount, 'email': email});
   }
@@ -145,38 +138,48 @@ class ApiService {
     return await postWithRetry('/set_threshold', {'threshold': threshold, 'email': email});
   }
 
-  // Aliases for dashboard calls (getArbitrage -> fetchArbitrage, etc.; rename in dashboard later for cleanliness)
-  static Future<Map<String, dynamic>> getArbitrage(String email) async => fetchArbitrage(email);
-  static Future<Map<String, dynamic>> getBalances(String email) async => fetchBalances(email);
-  static Future<Map<String, dynamic>> setThreshold(double threshold, String email) async => setTradeThreshold(threshold, email);
-
-  static Future<Map<String, dynamic>> fetchArbitrage(String email) async {
-    debugPrint('Fetching arbitrage for $email');  // FIXED: Added debug for call tracking
-    final fullUrl = Uri.parse('${baseUrl}arbitrage?email=${Uri.encodeComponent(email)}');
-    final response = await http.get(
-      fullUrl,
-      headers: _getHeaders(),  // Includes auth token
-    ).timeout(const Duration(seconds: 20));
-    if (response.statusCode == 200) {
-      final decoded = json.decode(response.body);
-      if (decoded is Map<String, dynamic>) return decoded;
-      throw Exception('Invalid JSON response structure');
-    }
-    throw Exception('Arbitrage fetch failed: $response.body');
-  }
-
+  // === CRITICAL FIX: USDC BALANCES ===
   static Future<Map<String, dynamic>> fetchBalances(String email) async {
-    debugPrint('Fetching balances for $email');  // FIXED: Added debug for call tracking
+    debugPrint('Fetching USDC balances for $email');
     final fullUrl = Uri.parse('${baseUrl}balances?email=${Uri.encodeComponent(email)}');
     final response = await http.get(
       fullUrl,
-      headers: _getHeaders(),  // Includes auth token
+      headers: _getHeaders(),
     ).timeout(const Duration(seconds: 20));
+
+    if (response.statusCode == 200) {
+      final decoded = json.decode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        // Ensure we return the correct keys: cex_usdc and kraken_usdc
+        return {
+          'cex_usdc': decoded['cex_usdc'] ?? decoded['cex_usd'] ?? 0.0,
+          'kraken_usdc': decoded['kraken_usdc'] ?? decoded['kraken_usd'] ?? 0.0,
+          if (decoded.containsKey('error')) 'error': decoded['error'],
+        };
+      }
+      throw Exception('Invalid JSON structure in balances');
+    }
+    throw Exception('Balances fetch failed: ${response.statusCode} ${response.body}');
+  }
+
+  // Arbitrage (unchanged — already correct)
+  static Future<Map<String, dynamic>> fetchArbitrage(String email) async {
+    debugPrint('Fetching arbitrage for $email');
+    final fullUrl = Uri.parse('${baseUrl}arbitrage?email=${Uri.encodeComponent(email)}');
+    final response = await http.get(
+      fullUrl,
+      headers: _getHeaders(),
+    ).timeout(const Duration(seconds: 20));
+
     if (response.statusCode == 200) {
       final decoded = json.decode(response.body);
       if (decoded is Map<String, dynamic>) return decoded;
-      throw Exception('Invalid JSON response structure');
+      throw Exception('Invalid JSON structure in arbitrage');
     }
-    throw Exception('Balances fetch failed: $response.body');
+    throw Exception('Arbitrage fetch failed: ${response.body}');
   }
+
+  // Legacy aliases (safe to keep)
+  static Future<Map<String, dynamic>> getArbitrage(String email) async => fetchArbitrage(email);
+  static Future<Map<String, dynamic>> getBalances(String email) async => fetchBalances(email);
 }
