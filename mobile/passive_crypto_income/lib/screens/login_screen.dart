@@ -21,24 +21,30 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
+
     setState(() {
       _isLoading = true;
       _error = null;
     });
+
     try {
-      final response = await _retryLogin(_emailController.text.trim(), _passwordController.text);
+      final response = await ApiService.login({
+        'email': _emailController.text.trim(),
+        'password': _passwordController.text,
+      });
+
       if (response['status'] == 'logged in') {
         final userEmail = response['email'] ?? _emailController.text.trim();
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('user_email', userEmail);
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => HomeScreen(userEmail: userEmail)),
-          );
-        }
+
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => HomeScreen(userEmail: userEmail)),
+        );
       } else {
-        throw Exception('Login failed: ${response['message'] ?? 'Unknown error'}');
+        throw Exception(response['message'] ?? 'Login failed');
       }
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -47,91 +53,44 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<Map<String, dynamic>> _retryLogin(String email, String password, {int retries = 3}) async {
-    const delayBase = Duration(seconds: 3);
-    for (int i = 0; i < retries; i++) {
-      try {
-        final user = {'email': email, 'password': password};
-        final response = await ApiService.login(user);
-        return response;
-      } catch (e) {
-        debugPrint('Login attempt ${i+1}/$retries failed: $e');
-        if (i < retries - 1) {
-          await Future.delayed(delayBase * (i + 1));
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) setState(() {});
-          });
-        }
-      }
-    }
-    throw Exception('Login failed after $retries attempts');
-  }
-
-  Future<void> _signup() async {
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const SignupScreen()));
-  }
-
   Future<void> _googleSignIn() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+    setState(() => _isLoading = true);
+
     try {
-      final googleSignIn = GoogleSignIn(scopes: <String>['email']);
+      final googleSignIn = GoogleSignIn(scopes: ['email']);
       final googleUser = await googleSignIn.signIn();
-      if (googleUser == null) {
-        throw Exception('Google Sign-In cancelled by user');
-      }
+      if (googleUser == null) throw Exception('Sign-in cancelled');
 
       final googleAuth = await googleUser.authentication;
-      if (googleAuth.idToken == null) {
-        throw Exception('No ID token received from Google');
-      }
+      if (googleAuth.idToken == null) throw Exception('No ID token');
 
-      final response = await ApiService.postWithRetry('/google_login', {'id_token': googleAuth.idToken});
+      final response = await ApiService.postWithRetry('/google_login', {
+        'id_token': googleAuth.idToken,
+      });
+
       if (response['status'] == 'logged in') {
         final userEmail = response['email'] ?? googleUser.email;
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('user_email', userEmail);
-        if (response.containsKey('token')) {
+        if (response['token'] != null) {
           await ApiService.setAuthToken(response['token']);
         }
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => HomeScreen(userEmail: userEmail)),
-          );
-        }
+
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => HomeScreen(userEmail: userEmail)),
+        );
       } else {
-        throw Exception('Google login failed: ${response['message'] ?? 'Unknown error'}');
+        throw Exception(response['message'] ?? 'Google login failed');
       }
     } catch (e) {
-      debugPrint('Google Sign-In error: $e');
-      if (mounted) setState(() => _error = 'Google Sign-In failed: $e');
+      if (mounted) {
+        setState(() => _error = 'Google Sign-In failed: $e');
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  String? _validateEmail(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Please enter your email';
-    }
-    final emailRegExp = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
-    if (!emailRegExp.hasMatch(value)) {
-      return 'Please enter a valid email';
-    }
-    return null;
-  }
-
-  String? _validatePassword(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Please enter your password';
-    }
-    if (value.length < 6) {
-      return 'Password must be at least 6 characters';
-    }
-    return null;
   }
 
   @override
@@ -139,98 +98,51 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Login')),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            minHeight: MediaQuery.of(context).size.height -
-                MediaQuery.of(context).padding.top -
-                MediaQuery.of(context).padding.bottom,
-          ),
-          child: IntrinsicHeight(
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  TextFormField(
-                    controller: _emailController,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      prefixIcon: Icon(Icons.email),
-                    ),
-                    keyboardType: TextInputType.emailAddress,
-                    validator: _validateEmail,
-                    autovalidateMode: AutovalidateMode.onUserInteraction,
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _passwordController,
-                    decoration: const InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: Icon(Icons.lock),
-                    ),
-                    obscureText: true,
-                    validator: _validatePassword,
-                    autovalidateMode: AutovalidateMode.onUserInteraction,
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _login,
-                      child: _isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(),
-                            )
-                          : const Text('Login'),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _signup,
-                    child: const Text('Sign Up'),
-                  ),
-                  if (_error != null)
-                    Container(
-                      padding: const EdgeInsets.all(12.0),
-                      margin: const EdgeInsets.symmetric(vertical: 8.0),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade100,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.red.shade300),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.error, color: Colors.red, size: 20),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _error!,
-                              style: const TextStyle(color: Colors.red),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  const SizedBox(height: 30),
-                  const Text('Or login with Google', style: TextStyle(fontWeight: FontWeight.w500)),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _isLoading ? null : _googleSignIn,
-                      icon: const Icon(Icons.g_mobiledata, color: Colors.white),
-                      label: const Text('Sign in with Google', style: TextStyle(color: Colors.white)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                  ),
-                ],
+        padding: const EdgeInsets.all(20),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              TextFormField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email)),
+                validator: (v) => v!.isEmpty ? 'Enter email' : null,
               ),
-            ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Password', prefixIcon: Icon(Icons.lock)),
+                validator: (v) => v!.length < 6 ? 'Min 6 characters' : null,
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _login,
+                  child: _isLoading ? const CircularProgressIndicator() : const Text('Login'),
+                ),
+              ),
+              TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SignupScreen())), child: const Text('Sign Up')),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(_error!, style: const TextStyle(color: Colors.red)),
+                ),
+              const SizedBox(height: 30),
+              const Text('Or', style: TextStyle(fontSize: 16)),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _isLoading ? null : _googleSignIn,
+                  icon: const Icon(Icons.g_mobiledata),
+                  label: const Text('Continue with Google'),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                ),
+              ),
+            ],
           ),
         ),
       ),
