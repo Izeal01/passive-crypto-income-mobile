@@ -6,7 +6,7 @@ import 'screens/login_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await ApiService.loadBaseUrl();  // Now exists
+  await ApiService.loadBaseUrl();
   await ApiService.loadAuthToken();
 
   runApp(

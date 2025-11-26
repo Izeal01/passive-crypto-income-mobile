@@ -8,7 +8,7 @@ class ApiService {
   static const String _baseUrl = 'https://passive-crypto-backend.onrender.com';
   static String? _authToken;
 
-  // Load base URL (required by main.dart and websocket_service.dart)
+  // Required by main.dart and WebSocket
   static Future<void> loadBaseUrl() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString('api_base_url');
@@ -17,7 +17,8 @@ class ApiService {
     }
   }
 
-  // Token management
+  static String get baseUrl => _baseUrl;
+
   static Future<void> setAuthToken(String? token) async {
     _authToken = token;
     final prefs = await SharedPreferences.getInstance();
@@ -33,10 +34,11 @@ class ApiService {
     _authToken = prefs.getString('auth_token');
   }
 
-  // Headers
   static Map<String, String> _headers() {
     final h = {'Content-Type': 'application/json'};
-    if (_authToken != null) h['Authorization'] = 'Bearer $_authToken';
+    if (_authToken != null && _authToken!.isNotEmpty) {
+      h['Authorization'] = 'Bearer $_authToken';
+    }
     return h;
   }
 
@@ -52,20 +54,20 @@ class ApiService {
             .post(url, headers: _headers(), body: json.encode(data))
             .timeout(const Duration(seconds: 20));
 
-        if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (response.statusCode == 200 || response.statusCode == 201) {
           final decoded = json.decode(response.body);
           if (decoded is Map<String, dynamic> && decoded['token'] != null) {
             await setAuthToken(decoded['token']);
           }
           return decoded;
         }
-        throw Exception('HTTP ${response.statusCode}');
+        throw Exception('HTTP ${response.statusCode}: ${response.body}');
       } catch (e) {
         if (i == 2) rethrow;
         await Future.delayed(Duration(seconds: i + 1));
       }
     }
-    throw Exception('Network error');
+    throw Exception('Network error after retries');
   }
 
   // Generic GET
@@ -75,10 +77,10 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
     }
-    throw Exception('HTTP ${response.statusCode}');
+    throw Exception('HTTP ${response.statusCode}: ${response.body}');
   }
 
-  // Public methods
+  // Public API
   static Future<Map<String, dynamic>> login(Map<String, String> user) =>
       postWithRetry('/login', user);
 
@@ -101,7 +103,4 @@ class ApiService {
 
   static Future<Map<String, dynamic>> fetchBalances(String email) => get('/balances', email);
   static Future<Map<String, dynamic>> fetchArbitrage(String email) => get('/arbitrage', email);
-
-  // For WebSocket
-  static String get baseUrl => _baseUrl;
 }
