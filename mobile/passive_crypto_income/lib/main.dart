@@ -6,7 +6,8 @@ import 'screens/login_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await ApiService.loadBaseUrl();
+  await ApiService.loadBaseUrl();  // Now exists
+  await ApiService.loadAuthToken();
 
   runApp(
     ChangeNotifierProvider(
@@ -23,10 +24,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Passive Crypto Income',
-      theme: ThemeData(
-        primarySwatch: Colors.green,
-        useMaterial3: true,
-      ),
+      theme: ThemeData(primarySwatch: Colors.green, useMaterial3: true),
       home: const LoginScreen(),
       debugShowCheckedModeBanner: false,
     );
