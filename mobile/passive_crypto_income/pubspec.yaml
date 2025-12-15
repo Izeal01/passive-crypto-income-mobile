@@ -1,25 +1,32 @@
-name: passive_crypto_income
+name: passive_crypto_income  # Keep this as folder/project name (Flutter convention)
 description: A new Flutter project.
 publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'  # FIXED: Kept original for stability
+  sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
-  google_sign_in: ^6.2.1  # FIXED: Latest stable
-  http: ^1.1.0  # As is
-  web_socket_channel: ^3.0.3  # FIXED: Latest stable
-  shared_preferences: ^2.2.2  # FIXED: Latest stable
-  cupertino_icons: ^1.0.1  # As is
-  provider: ^6.1.2  # FIXED: Added for state management
+  google_sign_in: ^6.2.1
+  http: ^1.1.0
+  web_socket_channel: ^3.0.3
+  shared_preferences: ^2.2.2
+  cupertino_icons: ^1.0.8
+  provider: ^6.1.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^6.0.0  # FIXED: Latest for stricter rules
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.13.1   # ← Only once here
 
 flutter:
   uses-material-design: true
+
+# flutter_launcher_icons config — CORRECT INDENTATION
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon/app_icon.png"

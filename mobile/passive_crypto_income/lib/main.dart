@@ -1,20 +1,13 @@
+// lib/main.dart — FINAL & WORKING
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'services/api_service.dart';
-import 'providers/api_keys_provider.dart';
 import 'screens/login_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await ApiService.loadBaseUrl();
-  await ApiService.loadAuthToken();
+  await ApiService.loadBaseUrl();  // Now exists
 
-  runApp(
-    ChangeNotifierProvider(
-      create: (_) => ApiKeysProvider(),
-      child: const MyApp(),
-    ),
-  );
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {

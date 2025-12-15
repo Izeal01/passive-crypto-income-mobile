@@ -1,10 +1,11 @@
-// lib/screens/home_screen.dart
+// lib/screens/home_screen.dart — FINAL & COMPLETE — 15-second updates
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../providers/api_keys_provider.dart';
-import '../services/api_service.dart';
-import 'api_keys_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dashboard_screen.dart';
+import 'api_keys_screen.dart';
+import '../services/api_service.dart';
+import 'login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final String userEmail;
@@ -15,146 +16,181 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  bool _hasKeys = false;
+  Map<String, dynamic> _arbitrageData = {};
+  Map<String, dynamic> _balances = {};
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _checkApiKeys();
+    _fetchData();
+    Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted) _fetchData();
+    });
   }
 
-  Future<void> _checkApiKeys() async {
+  Future<void> _fetchData() async {
     if (!mounted) return;
-
-    setState(() => _isLoading = true);
-
     try {
-      final keys = await ApiService.getKeys(widget.userEmail);
-      final hasKeys = keys['cex_key'] != null && keys['kraken_key'] != null;
-
-      if (!mounted) return;
-      setState(() {
-        _hasKeys = hasKeys;
-        _isLoading = false;
-      });
-
-      // Update provider so dashboard knows keys are saved
-      Provider.of<ApiKeysProvider>(context, listen: false).setKeysSaved(hasKeys);
+      final arb = await ApiService.fetchArbitrage(widget.userEmail);
+      final bal = await ApiService.fetchBalances(widget.userEmail);
+      if (mounted) {
+        setState(() {
+          _arbitrageData = arb;
+          _balances = bal;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      debugPrint('Error checking API keys: $e');
-      if (!mounted) return;
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _openApiKeysScreen() async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ApiKeysScreen(userEmail: widget.userEmail),
-      ),
-    );
-
-    // Prevent context usage after async gap
+  Future<void> _logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('user_email');
     if (!mounted) return;
-    if (result == true) {
-      _checkApiKeys(); // Refresh key status after update
-    }
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
+    final avgPrice = ((_arbitrageData['binanceus'] ?? 0.0) + (_arbitrageData['kraken'] ?? 0.0)) / 2;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Passive Crypto Income'),
-        backgroundColor: Colors.green,
-        elevation: 4,
+        backgroundColor: Colors.green.shade700,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(icon: const Icon(Icons.logout, color: Colors.white), onPressed: _logout, tooltip: 'Logout'),
+        ],
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: _hasKeys
-              ? Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.check_circle, color: Colors.green, size: 100),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'API Keys Connected',
-                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'You\'re ready to monitor arbitrage opportunities!',
-                      style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 40),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => DashboardScreen(userEmail: widget.userEmail),
+      body: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Welcome back!', style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: Colors.grey.shade800)),
+              const SizedBox(height: 6),
+              Text(widget.userEmail, style: TextStyle(fontSize: 18, color: Colors.grey.shade600)),
+              const SizedBox(height: 30),
+
+              Card(
+                elevation: 8,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text("XRP/USD Live Price", style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 16),
+                      _isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : Column(
+                              children: [
+                                Text("\$${avgPrice.toStringAsFixed(6)}", style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.green)),
+                                const SizedBox(height: 12),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                  children: [
+                                    _priceBox("Binance.US", (_arbitrageData['binanceus'] ?? 0.0).toStringAsFixed(6), Colors.blue),
+                                    _priceBox("Kraken", (_arbitrageData['kraken'] ?? 0.0).toStringAsFixed(6), Colors.purple),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                                  decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.green.shade200)),
+                                  child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                    Icon(Icons.autorenew, color: Colors.green, size: 18),
+                                    SizedBox(width: 8),
+                                    Text("Live • Updated every 15s", style: TextStyle(fontWeight: FontWeight.w600, color: Colors.green)),
+                                  ]),
+                                ),
+                              ],
                             ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          backgroundColor: Colors.green,
-                        ),
-                        child: const Text('Go to Dashboard', style: TextStyle(fontSize: 18)),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextButton(
-                      onPressed: _openApiKeysScreen,
-                      child: const Text('Replace API Keys'),
-                    ),
-                  ],
-                )
-              : Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.vpn_key_off, size: 100, color: Colors.grey),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'No API Keys Found',
-                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Connect your CEX.IO and Kraken accounts to start earning passive income.',
-                      style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 40),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _openApiKeysScreen,
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          backgroundColor: Colors.green,
-                        ),
-                        child: const Text('Connect Exchanges', style: TextStyle(fontSize: 18)),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
+              ),
+              const SizedBox(height: 30),
+
+              Card(
+                elevation: 6,
+                color: Colors.blue.shade50,
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('USD Balances', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 16),
+                      _isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Binance.US: \$${_balances['binanceus_usd']?.toStringAsFixed(2) ?? '0.00'}', style: const TextStyle(fontSize: 18)),
+                                Text('Kraken: \$${_balances['kraken_usd']?.toStringAsFixed(2) ?? '0.00'}', style: const TextStyle(fontSize: 18)),
+                                const Divider(height: 20),
+                                Text('Total: \$${_balances['binanceus_usd'] != null && _balances['kraken_usd'] != null ? (_balances['binanceus_usd'] + _balances['kraken_usd']).toStringAsFixed(2) : '0.00'}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)),
+                              ],
+                            ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 30),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DashboardScreen(userEmail: widget.userEmail))),
+                  icon: const Icon(Icons.dashboard, size: 28),
+                  label: const Text('Open Live Dashboard', style: TextStyle(fontSize: 18)),
+                  style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 18), backgroundColor: Colors.green.shade600),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ApiKeysScreen(userEmail: widget.userEmail))),
+                  icon: const Icon(Icons.vpn_key),
+                  label: const Text('Manage API Keys', style: TextStyle(fontSize: 18)),
+                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 18), side: BorderSide(color: Colors.green.shade600, width: 2)),
+                ),
+              ),
+
+              const SizedBox(height: 40),
+              const Center(
+                child: Text(
+                  'Auto-trading runs 24/7 in background\nEven when you log out or close the app',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic, fontSize: 15),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _priceBox(String exchange, String price, Color color) {
+    return Column(
+      children: [
+        Text(exchange, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+        const SizedBox(height: 6),
+        Text("\$$price", style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: color)),
+      ],
     );
   }
 }
